@@ -1,16 +1,41 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/xid"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
-var recipes []Recipe
+var (
+	recipes []Recipe
+
+	ctx    context.Context
+	err    error
+	client *mongo.Client
+)
+
+const (
+	MongoUri        = "mongodb://recipes:recipes@localhost:27017/demo?authSource=admin"
+	MongoDb         = "demo"
+	MongoCollection = "recipes"
+)
 
 func init() {
 	recipes = make([]Recipe, 0)
+	//
+	ctx = context.Background()
+	client, err = mongo.Connect(ctx, options.Client().ApplyURI(MongoUri))
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("Mongo database connected.")
 }
 
 type Recipe struct {
@@ -20,6 +45,46 @@ type Recipe struct {
 	Ingredients  []string  `json:"ingredients"`
 	Instructions []string  `json:"instructions"`
 	PublishedAt  time.Time `json:"published_at"`
+}
+
+// https://stackoverflow.com/questions/71907261/try-to-convert-json-to-map-for-golang-web-application
+// https://golangdocs.com/json-with-golang
+func ImportRecipesHandler(c *gin.Context) {
+	recipes := make([]Recipe, 0)
+	content, err := os.ReadFile("recipes.json")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	err = json.Unmarshal(content, &recipes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var items []interface{}
+	for _, recipe := range recipes {
+		items = append(items, recipe)
+	}
+
+	collection := client.Database(MongoDb).Collection(MongoCollection)
+	result, err := collection.InsertMany(ctx, items)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"detail":  result.InsertedIDs,
+	})
 }
 
 func NewRecipesHandler(c *gin.Context) {
@@ -68,6 +133,7 @@ func UpdateRecipeHandler(c *gin.Context) {
 		return
 	}
 
+	recipe.ID = id // sin esto el ID del recipe se pierde al actualizar
 	recipes[index] = recipe
 
 	c.JSON(http.StatusOK, recipe)
@@ -96,9 +162,11 @@ func DeleteRecipeHandler(c *gin.Context) {
 
 func main() {
 	router := gin.Default()
+	router.GET("/import", ImportRecipesHandler)
+	//
 	router.POST("/recipes", NewRecipesHandler)
 	router.GET("/recipes", ListRecipesHandler)
 	router.PUT("/recipes/:id", UpdateRecipeHandler)
 	router.DELETE("/recipes/:id", DeleteRecipeHandler)
-	router.Run()
+	log.Fatal(router.Run())
 }
