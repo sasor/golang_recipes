@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v9"
 	"github.com/sasor/golang_recipes/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,12 +16,14 @@ import (
 type RecipesHandler struct {
 	collection *mongo.Collection
 	context    context.Context
+	redis      *redis.Client
 }
 
-func NewRecipesHandler(ctx context.Context, collection *mongo.Collection) *RecipesHandler {
+func NewRecipesHandler(ctx context.Context, collection *mongo.Collection, redis *redis.Client) *RecipesHandler {
 	return &RecipesHandler{
 		context:    ctx,
 		collection: collection,
+		redis:      redis,
 	}
 }
 

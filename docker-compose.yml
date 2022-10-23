@@ -13,6 +13,11 @@ services:
       MONGO_INITDB_ROOT_USERNAME: recipes
       MONGO_INITDB_ROOT_PASSWORD: recipes
 
+  redis:
+    image: redis:7.0.5-alpine
+    restart: always
+    ports:
+      - "6379:6379"
 
 #https://stackoverflow.com/questions/60394290/mongo-db-docker-image-authentication-failed:
 #https://dev.to/efe136/how-to-enable-mongodb-authentication-with-docker-compose-2nbp

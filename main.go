@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v9"
 	"github.com/sasor/golang_recipes/handlers"
 	"github.com/sasor/golang_recipes/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -29,9 +30,21 @@ func init() {
 		panic(err)
 	}
 
+	log.Println("Mongo connected.")
 	collection := client.Database(MongoDb).Collection(MongoCollection)
-	recipesHandler = handlers.NewRecipesHandler(ctx, collection)
-	log.Printf("Mongo database connected.")
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	result, err := redisClient.Ping(ctx).Result()
+	if err != nil {
+		panic(err)
+	}
+	log.Println("Redis connected. ::: " + result)
+
+	recipesHandler = handlers.NewRecipesHandler(ctx, collection, redisClient)
 }
 
 // https://stackoverflow.com/questions/71907261/try-to-convert-json-to-map-for-golang-web-application
