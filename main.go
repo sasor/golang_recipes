@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/xid"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
@@ -29,8 +29,6 @@ const (
 )
 
 func init() {
-	recipes = make([]Recipe, 0)
-	//
 	ctx = context.Background()
 	client, err = mongo.Connect(ctx, options.Client().ApplyURI(MongoUri))
 	if err != nil {
@@ -40,12 +38,12 @@ func init() {
 }
 
 type Recipe struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Tags         []string  `json:"tags"`
-	Ingredients  []string  `json:"ingredients"`
-	Instructions []string  `json:"instructions"`
-	PublishedAt  time.Time `json:"published_at"`
+	ID           primitive.ObjectID `json:"id" bson:"_id"`
+	Name         string             `json:"name" bson:"name"`
+	Tags         []string           `json:"tags" bson:"tags"`
+	Ingredients  []string           `json:"ingredients" bson:"ingredients"`
+	Instructions []string           `json:"instructions" bson:"instructions"`
+	PublishedAt  time.Time          `json:"published_at" bson:"published_at"`
 }
 
 // https://stackoverflow.com/questions/71907261/try-to-convert-json-to-map-for-golang-web-application
@@ -97,9 +95,18 @@ func NewRecipesHandler(c *gin.Context) {
 		})
 		return
 	}
-	recipe.ID = xid.New().String()
+	recipe.ID = primitive.NewObjectID()
 	recipe.PublishedAt = time.Now()
-	recipes = append(recipes, recipe)
+
+	collection := client.Database(MongoDb).Collection(MongoCollection)
+	_, err = collection.InsertOne(ctx, recipe)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Error on storing a recipe",
+			"details": err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, recipe)
 }
@@ -138,45 +145,57 @@ func UpdateRecipeHandler(c *gin.Context) {
 		return
 	}
 
-	index := -1
-
-	for idx, r := range recipes {
-		if r.ID == id {
-			index = idx
-		}
-	}
-
-	if index == -1 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Recipe Not Found",
+	objectId, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid param",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	recipe.ID = id // sin esto el ID del recipe se pierde al actualizar
-	recipes[index] = recipe
+	filter := bson.D{{"_id", objectId}}
+	update := bson.D{{"$set", bson.D{
+		{"name", recipe.Name},
+		{"instructions", recipe.Instructions},
+		{"ingredients", recipe.Ingredients},
+		{"tags", recipe.Tags},
+	}}}
+	collection := client.Database(MongoDb).Collection(MongoCollection)
+	_, err = collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Recipe not updated",
+			"details": err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, recipe)
 }
 
 func DeleteRecipeHandler(c *gin.Context) {
 	id := c.Param("id")
-	index := -1
-
-	for idx, r := range recipes {
-		if r.ID == id {
-			index = idx
-		}
-	}
-
-	if index == -1 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Recipe not found",
+	objectId, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid param",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	recipes = append(recipes[:index], recipes[index+1:]...)
+	collection := client.Database(MongoDb).Collection(MongoCollection)
+	filter := bson.D{{"_id", objectId}}
+	_, err = collection.DeleteOne(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Some error",
+			"details": err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusNoContent, nil)
 }
 
