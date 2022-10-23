@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/xid"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
@@ -104,6 +105,25 @@ func NewRecipesHandler(c *gin.Context) {
 }
 
 func ListRecipesHandler(c *gin.Context) {
+	collection := client.Database(MongoDb).Collection(MongoCollection)
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+	defer cursor.Close(ctx)
+
+	recipes := make([]Recipe, 0)
+	for cursor.Next(ctx) {
+		var recipe Recipe
+		err := cursor.Decode(&recipe)
+		if err != nil {
+			log.Println(err.Error())
+		}
+		recipes = append(recipes, recipe)
+	}
+
 	c.JSON(http.StatusOK, recipes)
 }
 
