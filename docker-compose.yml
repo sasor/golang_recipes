@@ -19,5 +19,12 @@ services:
     ports:
       - "6379:6379"
 
+  gui:
+    image: redislabs/redisinsight:1.13.0
+    ports:
+      - "9091:8001"
+    depends_on:
+      - redis
+
 #https://stackoverflow.com/questions/60394290/mongo-db-docker-image-authentication-failed:
 #https://dev.to/efe136/how-to-enable-mongodb-authentication-with-docker-compose-2nbp

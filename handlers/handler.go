@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v9"
 	"github.com/sasor/golang_recipes/models"
@@ -14,8 +15,8 @@ import (
 )
 
 type RecipesHandler struct {
-	collection *mongo.Collection
 	context    context.Context
+	collection *mongo.Collection
 	redis      *redis.Client
 }
 
@@ -36,22 +37,44 @@ func (h *RecipesHandler) SharedContext() context.Context {
 }
 
 func (h *RecipesHandler) ListRecipesHandler(c *gin.Context) {
-	cursor, err := h.collection.Find(h.context, bson.M{})
-	if err != nil {
+	recipes := make([]models.Recipe, 0)
+	result, err := h.redis.Get(h.context, "recipes").Result()
+	if err == redis.Nil {
+		log.Println("MONGO request")
+		cursor, err := h.collection.Find(h.context, bson.M{})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+		}
+		defer cursor.Close(h.context)
+
+		for cursor.Next(h.context) {
+			var recipe models.Recipe
+			err := cursor.Decode(&recipe)
+			if err != nil {
+				log.Println(err.Error())
+			}
+			recipes = append(recipes, recipe)
+		}
+		marshal, _ := json.Marshal(recipes)
+		h.redis.Set(h.context, "recipes", string(marshal), 0)
+		c.JSON(http.StatusOK, recipes)
+		return
+	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
-	}
-	defer cursor.Close(h.context)
-
-	recipes := make([]models.Recipe, 0)
-	for cursor.Next(h.context) {
-		var recipe models.Recipe
-		err := cursor.Decode(&recipe)
+		return
+	} else {
+		log.Println("REDIS request")
+		err := json.Unmarshal([]byte(result), &recipes)
 		if err != nil {
-			log.Println(err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
 		}
-		recipes = append(recipes, recipe)
 	}
 
 	c.JSON(http.StatusOK, recipes)
@@ -78,6 +101,7 @@ func (h *RecipesHandler) NewRecipesHandler(c *gin.Context) {
 		return
 	}
 
+	h.redis.Del(h.context, "recipes")
 	c.JSON(http.StatusOK, recipe)
 }
 
@@ -102,6 +126,7 @@ func (h *RecipesHandler) DeleteRecipeHandler(c *gin.Context) {
 		return
 	}
 
+	h.redis.Del(h.context, "recipes")
 	c.JSON(http.StatusNoContent, nil)
 }
 
@@ -142,5 +167,6 @@ func (h *RecipesHandler) UpdateRecipeHandler(c *gin.Context) {
 		return
 	}
 
+	h.redis.Del(h.context, "recipes")
 	c.JSON(http.StatusOK, recipe)
 }
