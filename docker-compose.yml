@@ -1,0 +1,30 @@
+version: '3.7'
+
+services:
+  mongo:
+    image: mongo:6.0.2
+    restart: always
+    command: [--auth] ## trick, gracias a este parametro recien pude conectarme usando las variables de entorno
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: recipes
+      MONGO_INITDB_ROOT_PASSWORD: recipes
+
+  redis:
+    image: redis:7.0.5-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  gui:
+    image: redislabs/redisinsight:1.13.0
+    ports:
+      - "9091:8001"
+    depends_on:
+      - redis
+
+#https://stackoverflow.com/questions/60394290/mongo-db-docker-image-authentication-failed:
+#https://dev.to/efe136/how-to-enable-mongodb-authentication-with-docker-compose-2nbp
