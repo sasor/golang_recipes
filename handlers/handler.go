@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v9"
 	"github.com/sasor/golang_recipes/models"
@@ -78,6 +79,55 @@ func (h *RecipesHandler) ListRecipesHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, recipes)
+}
+
+func (h *RecipesHandler) RetrieveARecipeHandler(c *gin.Context) {
+	id := c.Param("id")
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	var recipe models.Recipe
+	redisKey := fmt.Sprintf("%s/%s", "recipe", id)
+	result, err := h.redis.Get(h.context, redisKey).Result()
+	if err == redis.Nil {
+		log.Println("MONGO request")
+		filter := bson.D{{"_id", objectID}}
+		err = h.collection.FindOne(h.context, filter).Decode(&recipe)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		marshal, _ := json.Marshal(recipe)
+		h.redis.Set(h.context, redisKey, string(marshal), 0)
+		c.JSON(http.StatusOK, recipe)
+		return
+	} else if err != nil {
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	} else {
+		log.Println("REDIS request")
+		err := json.Unmarshal([]byte(result), &recipe)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, recipe)
 }
 
 func (h *RecipesHandler) NewRecipesHandler(c *gin.Context) {
