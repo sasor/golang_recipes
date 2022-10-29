@@ -89,12 +89,18 @@ func ImportRecipesHandler(c *gin.Context) {
 
 func main() {
 	router := gin.Default()
+
 	router.GET("/import", ImportRecipesHandler)
-	//
-	router.POST("/recipes", recipesHandler.NewRecipesHandler)
 	router.GET("/recipes", recipesHandler.ListRecipesHandler)
-	router.GET("/recipes/:id", recipesHandler.RetrieveARecipeHandler)
-	router.PUT("/recipes/:id", recipesHandler.UpdateRecipeHandler)
-	router.DELETE("/recipes/:id", recipesHandler.DeleteRecipeHandler)
+
+	authorized := router.Group("/")
+	authorized.Use(handlers.AuthMiddleware())
+	{
+		authorized.POST("/recipes", recipesHandler.NewRecipesHandler)
+		authorized.GET("/recipes/:id", recipesHandler.RetrieveARecipeHandler)
+		authorized.PUT("/recipes/:id", recipesHandler.UpdateRecipeHandler)
+		authorized.DELETE("/recipes/:id", recipesHandler.DeleteRecipeHandler)
+	}
+	//
 	log.Fatal(router.Run())
 }
