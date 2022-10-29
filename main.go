@@ -22,6 +22,7 @@ const (
 )
 
 var recipesHandler *handlers.RecipesHandler
+var authHandler handlers.AuthHandler
 
 func init() {
 	ctx := context.Background()
@@ -45,6 +46,7 @@ func init() {
 	log.Println("Redis connected. ::: " + result)
 
 	recipesHandler = handlers.NewRecipesHandler(ctx, collection, redisClient)
+	authHandler = handlers.AuthHandler{}
 }
 
 // https://stackoverflow.com/questions/71907261/try-to-convert-json-to-map-for-golang-web-application
@@ -92,6 +94,8 @@ func main() {
 
 	router.GET("/import", ImportRecipesHandler)
 	router.GET("/recipes", recipesHandler.ListRecipesHandler)
+	router.POST("/signin", authHandler.SignInHandler)
+	router.POST("/refresh", authHandler.RefreshToken)
 
 	authorized := router.Group("/")
 	authorized.Use(handlers.AuthMiddleware())
